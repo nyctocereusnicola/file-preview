@@ -759,7 +759,63 @@ function showError(msg) {
   previewArea.innerHTML = '<div class="error-state"><span class="emoji">⚠️</span><p class="msg">${msg}</p></div>';
 }
 
-// ===== Shared File Detection =====
+// ===== iOS Shortcut File Detection (via URL hash) =====
+function checkShortcutFile() {
+  const hash = window.location.hash.substring(1); // strip '#'
+  if (!hash) return;
+
+  const params = new URLSearchParams(hash);
+  if (params.get('shortcut') !== '1') return;
+
+  const name = params.get('name') || 'shared-file';
+  let data = params.get('data');
+  const from = params.get('from') || '';
+
+  if (!data) {
+    showToast('文件数据为空');
+    return;
+  }
+
+  // Clean hash
+  window.location.hash = '';
+
+  try {
+    // Reverse base64url → standard base64
+    data = data.replace(/-/g, '+').replace(/_/g, '/');
+    while (data.length % 4) data += '=';
+
+    // Decode base64 to binary
+    const binaryString = atob(data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    // Determine MIME type
+    const ext = name.split('.').pop().toLowerCase();
+    const mimeMap = {
+      html: 'text/html', htm: 'text/html',
+      md: 'text/markdown', txt: 'text/plain',
+      csv: 'text/csv', json: 'application/json',
+      xml: 'text/xml',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    };
+    const mime = mimeMap[ext] || 'text/plain';
+
+    const blob = new Blob([bytes], { type: mime });
+    const file = new File([blob], name, { type: mime });
+    handleFile(file);
+
+    const sourceLabel = from ? ('via ' + from) : '';
+    showToast('已从快捷指令打开 ' + sourceLabel);
+  } catch (err) {
+    console.error('Shortcut file error:', err);
+    showToast('文件解码失败，请尝试从主页面手动选择文件');
+  }
+}
+
+// ===== Shared File Detection (PWA Share Target) =====
 async function checkSharedFile() {
   const params = new URLSearchParams(window.location.search);
   const shared = params.get('shared');
@@ -807,8 +863,9 @@ async function checkSharedFile() {
   }
 }
 
-// Run on load
+// Run on load — check shortcut file first (no SW needed), then shared file
 window.addEventListener('DOMContentLoaded', () => {
+  checkShortcutFile();
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.ready.then(() => checkSharedFile());
   }
