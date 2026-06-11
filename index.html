@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1a1a2e">
+<title>Quick View - 文件预览</title>
+<link rel="manifest" href="manifest.json">
+
+<!-- CDN: Markdown parser -->
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+<!-- CDN: Word docx parser -->
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
+<!-- CDN: Excel xlsx parser -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f8f9fa;
+  --surface: #ffffff;
+  --text: #212529;
+  --text-secondary: #6c757d;
+  --accent: #4361ee;
+  --accent-hover: #3a56d4;
+  --border: #dee2e6;
+  --shadow: 0 2px 12px rgba(0,0,0,0.08);
+  --radius: 12px;
+  --danger: #e63946;
+  --success: #2a9d8f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a2e;
+    --surface: #16213e;
+    --text: #e9ecef;
+    --text-secondary: #adb5bd;
+    --accent: #4895ef;
+    --accent-hover: #4361ee;
+    --border: #2a2a4a;
+    --shadow: 0 2px 12px rgba(0,0,0,0.3);
+  }
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ===== App Bar ===== */
+.app-bar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+}
+.app-bar h1 {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+.app-bar .subtitle {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+.app-bar .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-weight: 500;
+}
+
+/* ===== Main Content ===== */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  max-width: 800px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ===== Upload Zone ===== */
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 32px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: var(--surface);
+  margin-bottom: 16px;
+  position: relative;
+}
+.upload-zone:hover, .upload-zone.drag-over {
+  border-color: var(--accent);
+  background: rgba(67, 97, 238, 0.04);
+}
+.upload-zone .icon {
+  font-size: 40px;
+  margin-bottom: 8px;
+  display: block;
+}
+.upload-zone .label {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.upload-zone .hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.upload-zone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* ===== Format Buttons Row ===== */
+.format-hints {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  justify-content: center;
+}
+.format-tag {
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* ===== File Info Bar ===== */
+.file-info {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+.file-info.visible { display: flex; }
+.file-info .file-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+.file-info .file-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  word-break: break-all;
+  line-height: 1.3;
+}
+.file-info .format-badge {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.file-info .clear-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  line-height: 1;
+}
+.file-info .clear-btn:hover {
+  background: rgba(0,0,0,0.05);
+}
+
+/* ===== Preview Area ===== */
+.preview-area {
+  display: none;
+  flex: 1;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  min-height: 200px;
+}
+.preview-area.visible { display: flex; flex-direction: column; }
+
+/* HTML iframe */
+.preview-area iframe {
+  width: 100%;
+  flex: 1;
+  border: none;
+  min-height: 400px;
+}
+
+/* MD / DOCX rendered content */
+.preview-content {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+  font-size: 15px;
+  line-height: 1.7;
+  -webkit-overflow-scrolling: touch;
+}
+.preview-content h1 { font-size: 1.6em; margin: 0.8em 0 0.4em; }
+.preview-content h2 { font-size: 1.35em; margin: 0.7em 0 0.35em; }
+.preview-content h3 { font-size: 1.15em; margin: 0.6em 0 0.3em; }
+.preview-content p { margin: 0.5em 0; }
+.preview-content ul, .preview-content ol { padding-left: 1.5em; margin: 0.5em 0; }
+.preview-content li { margin: 0.2em 0; }
+.preview-content code {
+  background: rgba(0,0,0,0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  font-family: "SF Mono", "Fira Code", monospace;
+}
+.preview-content pre {
+  background: #1e1e2e;
+  color: #cdd6f4;
+  padding: 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0.8em 0;
+}
+.preview-content pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+.preview-content blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 14px;
+  color: var(--text-secondary);
+  margin: 0.8em 0;
+}
+.preview-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.8em 0;
+  font-size: 13px;
+}
+.preview-content th, .preview-content td {
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  text-align: left;
+}
+.preview-content th {
+  background: rgba(0,0,0,0.03);
+  font-weight: 600;
+}
+.preview-content img { max-width: 100%; border-radius: 6px; }
+.preview-content a { color: var(--accent); }
+
+/* Excel table */
+.excel-table-wrap {
+  overflow-x: auto;
+  flex: 1;
+  -webkit-overflow-scrolling: touch;
+}
+.excel-table-wrap table {
+  border-collapse: collapse;
+  font-size: 12px;
+  width: max-content;
+  min-width: 100%;
+}
+.excel-table-wrap th {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  padding: 8px 12px;
+  border: 1px solid rgba(255,255,255,0.2);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.excel-table-wrap td {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.excel-table-wrap tr:nth-child(even) td {
+  background: rgba(0,0,0,0.02);
+}
+
+/* ===== Empty State ===== */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+.empty-state .emoji { font-size: 48px; margin-bottom: 12px; }
+.empty-state .title { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.empty-state .desc { font-size: 13px; }
+
+/* ===== Loading ===== */
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  gap: 12px;
+}
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading .text { font-size: 13px; color: var(--text-secondary); }
+
+/* ===== Error ===== */
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--danger);
+}
+.error-state .emoji { font-size: 40px; margin-bottom: 8px; }
+.error-state .msg { font-size: 14px; font-weight: 500; }
+
+/* ===== Footer ===== */
+.footer {
+  text-align: center;
+  padding: 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--border);
+}
+.footer a { color: var(--accent); text-decoration: none; }
+
+/* ===== Toast ===== */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #212529;
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- App Bar -->
+<header class="app-bar">
+  <div>
+    <h1>Quick View</h1>
+    <span class="subtitle">本地文件即时预览 · 数据不出手机</span>
+  </div>
+  <span class="badge">📱 移动版</span>
+</header>
+
+<!-- Main -->
+<main class="main-content">
+  <!-- Upload Zone -->
+  <div class="upload-zone" id="uploadZone">
+    <span class="icon">📂</span>
+    <div class="label">点击选择文件</div>
+    <div class="hint">或拖拽文件到此处</div>
+    <input type="file" id="fileInput" accept=".html,.htm,.md,.markdown,.docx,.xlsx,.txt,.csv,.json,.xml">
+  </div>
+
+  <!-- Format hints -->
+  <div class="format-hints">
+    <span class="format-tag">HTML</span>
+    <span class="format-tag">Markdown</span>
+    <span class="format-tag">Word .docx</span>
+    <span class="format-tag">Excel .xlsx</span>
+    <span class="format-tag">TXT/CSV</span>
+  </div>
+
+  <!-- File Info Bar -->
+  <div class="file-info" id="fileInfo">
+    <span class="file-icon" id="fileIcon">📄</span>
+    <span class="file-name" id="fileName"></span>
+    <span class="format-badge" id="formatBadge"></span>
+    <button class="clear-btn" id="clearBtn" title="清除">✕</button>
+  </div>
+
+  <!-- Preview Area -->
+  <div class="preview-area" id="previewArea"></div>
+</main>
+
+<!-- Footer -->
+<footer class="footer">
+  Quick View · 纯前端预览，文件不会上传到任何服务器 · 
+  <a href="https://github.com/nyctocereusnicola/file-preview" target="_blank">开源</a>
+</footer>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== DOM =====
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+const fileInfo = document.getElementById('fileInfo');
+const fileName = document.getElementById('fileName');
+const fileIcon = document.getElementById('fileIcon');
+const formatBadge = document.getElementById('formatBadge');
+const clearBtn = document.getElementById('clearBtn');
+const previewArea = document.getElementById('previewArea');
+const toast = document.getElementById('toast');
+
+// ===== Toast =====
+let toastTimer;
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+// ===== File Input Events =====
+uploadZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => {
+  if (e.target.files.length > 0) handleFile(e.target.files[0]);
+});
+
+// ===== Drag & Drop =====
+uploadZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  uploadZone.classList.add('drag-over');
+});
+uploadZone.addEventListener('dragleave', () => {
+  uploadZone.classList.remove('drag-over');
+});
+uploadZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
+});
+
+// ===== Clear =====
+clearBtn.addEventListener('click', () => {
+  fileInput.value = '';
+  fileInfo.classList.remove('visible');
+  previewArea.classList.remove('visible');
+  previewArea.innerHTML = '';
+});
+
+// ===== File Icon by Extension =====
+function getFileIcon(ext) {
+  const map = {
+    html: '🌐', htm: '🌐',
+    md: '📝', markdown: '📝',
+    docx: '📄',
+    xlsx: '📊',
+    csv: '📊',
+    txt: '📃',
+    json: '⚙️',
+    xml: '⚙️',
+  };
+  return map[ext] || '📁';
+}
+
+// ===== Main Handler =====
+async function handleFile(file) {
+  const name = file.name;
+  const ext = name.split('.').pop().toLowerCase();
+
+  // Show file info
+  fileName.textContent = name;
+  fileIcon.textContent = getFileIcon(ext);
+  formatBadge.textContent = ext;
+  fileInfo.classList.add('visible');
+
+  // Show loading
+  previewArea.classList.add('visible');
+  previewArea.innerHTML = '<div class="loading"><div class="spinner"></div><div class="text">正在读取文件...</div></div>';
+
+  try {
+    // Read as text (default for most formats)
+    if (['html', 'htm', 'md', 'markdown', 'txt', 'csv', 'json', 'xml'].includes(ext)) {
+      const text = await readAsText(file);
+      renderByType(ext, text, name);
+    }
+    // Read as ArrayBuffer for binary formats
+    else if (ext === 'docx') {
+      const buffer = await readAsArrayBuffer(file);
+      renderDocx(buffer);
+    }
+    else if (ext === 'xlsx') {
+      const buffer = await readAsArrayBuffer(file);
+      renderXlsx(buffer, name);
+    }
+    else {
+      showError('暂不支持此文件格式 (.${ext})');
+    }
+  } catch (err) {
+    console.error(err);
+    showError('文件读取失败: ${err.message}');
+  }
+}
+
+// ===== File Readers =====
+function readAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('读取失败'));
+    reader.readAsText(file);
+  });
+}
+
+function readAsArrayBuffer(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('读取失败'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// ===== Renderers =====
+function renderByType(ext, content, fileName) {
+  if (ext === 'html' || ext === 'htm') {
+    renderHtml(content);
+  } else if (ext === 'md' || ext === 'markdown') {
+    renderMarkdown(content);
+  } else if (ext === 'csv') {
+    renderCsv(content);
+  } else if (ext === 'txt' || ext === 'json' || ext === 'xml') {
+    renderPlainText(content, ext);
+  } else {
+    previewArea.innerHTML = '<div class="preview-content">${escapeHtml(content)}</div>';
+  }
+}
+
+// HTML — sandboxed iframe
+function renderHtml(htmlContent) {
+  const blob = new Blob([htmlContent], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const iframe = document.createElement('iframe');
+  iframe.src = url;
+  iframe.sandbox = 'allow-scripts allow-same-origin';
+  iframe.title = 'HTML Preview';
+  previewArea.innerHTML = '';
+  previewArea.appendChild(iframe);
+  // Cleanup blob URL after load
+  iframe.onload = () => {
+    // Keep URL alive while iframe is visible
+  };
+}
+
+// Markdown
+function renderMarkdown(mdContent) {
+  if (typeof marked === 'undefined') {
+    showError('Markdown 解析库加载失败，请检查网络后刷新页面');
+    return;
+  }
+  try {
+    marked.setOptions({ breaks: true, gfm: true });
+    const html = marked.parse(mdContent);
+    previewArea.innerHTML = '<div class="preview-content">${html}</div>';
+  } catch (err) {
+    showError('Markdown 解析错误: ${err.message}');
+  }
+}
+
+// DOCX
+function renderDocx(buffer) {
+  if (typeof mammoth === 'undefined') {
+    showError('Word 解析库加载失败，请检查网络后刷新页面');
+    return;
+  }
+  mammoth.convertToHtml({ arrayBuffer: buffer })
+    .then(result => {
+      previewArea.innerHTML = '<div class="preview-content">${result.value}</div>';
+      if (result.messages.length > 0) {
+        console.warn('Mammoth warnings:', result.messages);
+      }
+    })
+    .catch(err => {
+      showError('Word 文档解析失败: ${err.message}');
+    });
+}
+
+// XLSX — show all sheets
+function renderXlsx(buffer, fileName) {
+  if (typeof XLSX === 'undefined') {
+    showError('Excel 解析库加载失败，请检查网络后刷新页面');
+    return;
+  }
+  try {
+    const workbook = XLSX.read(buffer, { type: 'array' });
+    const sheetNames = workbook.SheetNames;
+
+    let html = '';
+
+    // If only one sheet, render it directly
+    if (sheetNames.length === 1) {
+      const sheet = workbook.Sheets[sheetNames[0]];
+      const csv = XLSX.utils.sheet_to_csv(sheet);
+      html += renderSheetTable(csv, sheetNames[0]);
+    } else {
+      // Multiple sheets: tabs
+      html += '<div class="excel-sheets">';
+      html += '<div class="sheet-tabs">';
+      sheetNames.forEach((name, i) => {
+        html += '<button class="sheet-tab ${i === 0 ? "active" : ""}" data-sheet="${i}">${escapeHtml(name)}</button>';
+      });
+      html += '</div>';
+      sheetNames.forEach((name, i) => {
+        const sheet = workbook.Sheets[name];
+        const csv = XLSX.utils.sheet_to_csv(sheet);
+        html += '<div class="sheet-content" data-sheet="${i}" style="display: ${i === 0 ? "block" : "none"}">';
+        html += renderSheetTable(csv, name);
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+
+    previewArea.innerHTML = html;
+
+    // Sheet tab switching
+    previewArea.querySelectorAll('.sheet-tab').forEach(tab => {
+      tab.addEventListener('click', function() {
+        const idx = this.dataset.sheet;
+        previewArea.querySelectorAll('.sheet-tab').forEach(t => t.classList.remove('active'));
+        this.classList.add('active');
+        previewArea.querySelectorAll('.sheet-content').forEach(c => {
+          c.style.display = c.dataset.sheet === idx ? 'block' : 'none';
+        });
+      });
+    });
+  } catch (err) {
+    showError('Excel 解析失败: ${err.message}');
+  }
+}
+
+function renderSheetTable(csv, sheetName) {
+  const rows = csv.split('\n').filter(r => r.trim());
+  if (rows.length === 0) return '<p style="padding:20px;color:var(--text-secondary)">空表格</p>';
+
+  let table = '<div class="excel-table-wrap"><table><thead><tr>';
+  const headers = rows[0].split(',');
+  headers.forEach(h => table += '<th>${escapeHtml(h.trim())}</th>');
+  table += '</tr></thead><tbody>';
+
+  for (let i = 1; i < Math.min(rows.length, 500); i++) {
+    table += '<tr>';
+    const cells = rows[i].split(',');
+    cells.forEach(c => table += '<td>${escapeHtml(c.trim())}</td>');
+    table += '</tr>';
+  }
+  table += '</tbody></table></div>';
+
+  if (rows.length > 500) {
+    table += '<p style="padding:12px;color:var(--text-secondary);text-align:center;font-size:13px;">仅显示前 500 行（共 ${rows.length - 1} 行数据）</p>';
+  }
+
+  return table;
+}
+
+// CSV direct render
+function renderCsv(csvContent) {
+  previewArea.innerHTML = renderSheetTable(csvContent, 'CSV');
+}
+
+// Plain text with syntax-friendly display
+function renderPlainText(content, ext) {
+  const label = ext.toUpperCase();
+  const escaped = escapeHtml(content);
+  previewArea.innerHTML = '<div class="preview-content"><pre><code>${escaped}</code></pre></div>';
+}
+
+// ===== Helpers =====
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function showError(msg) {
+  previewArea.innerHTML = '<div class="error-state"><span class="emoji">⚠️</span><p class="msg">${msg}</p></div>';
+}
+
+// ===== Service Worker =====
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+
+// ===== Prevent accidental page reload on mobile pull-down =====
+let touchStartY = 0;
+document.addEventListener('touchstart', e => { touchStartY = e.touches[0].clientY; }, { passive: true });
+document.addEventListener('touchmove', e => {
+  const scrollTop = document.scrollingElement.scrollTop;
+  if (scrollTop === 0 && e.touches[0].clientY > touchStartY) {
+    // User is pulling down at top — allow but don't reload
+  }
+}, { passive: true });
+</script>
+
+<style>
+/* Sheet tabs for multi-sheet Excel */
+.excel-sheets { display: flex; flex-direction: column; height: 100%; }
+.sheet-tabs {
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  border-bottom: 2px solid var(--border);
+  padding: 0 8px;
+  -webkit-overflow-scrolling: touch;
+}
+.sheet-tab {
+  padding: 10px 16px;
+  border: none;
+  background: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.sheet-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.sheet-tab:hover { color: var(--text); }
+.sheet-content { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+</style>
+
+</body>
+</html>

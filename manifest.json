@@ -1,0 +1,29 @@
+{
+  "name": "Quick View - 文件预览",
+  "short_name": "Quick View",
+  "description": "本地文件即时预览工具，支持 HTML/Markdown/Word/Excel",
+  "start_url": "/file-preview/",
+  "scope": "/file-preview/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f8f9fa",
+  "theme_color": "#1a1a2e",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%234361ee'/><text x='50' y='68' text-anchor='middle' font-size='50' fill='white'>📂</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "share_target": {
+    "action": "/file-preview/",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "name",
+      "text": "description",
+      "url": "link"
+    }
+  }
+}
