@@ -495,7 +495,7 @@ function showToast(msg) {
 }
 
 // ===== File Input Events =====
-uploadZone.addEventListener('click', () => fileInput.click());
+// 只用 CSS 透明 overlay 触发，iOS Safari 上 JS click() 会导致 change 事件不触发
 fileInput.addEventListener('change', (e) => {
   if (e.target.files.length > 0) handleFile(e.target.files[0]);
 });
@@ -568,11 +568,11 @@ async function handleFile(file) {
       renderXlsx(buffer, name);
     }
     else {
-      showError('暂不支持此文件格式 (.${ext})');
+      showError(`暂不支持此文件格式 (.${ext})`);
     }
   } catch (err) {
     console.error(err);
-    showError('文件读取失败: ${err.message}');
+    showError(`文件读取失败: ${err.message}`);
   }
 }
 
@@ -606,7 +606,7 @@ function renderByType(ext, content, fileName) {
   } else if (ext === 'txt' || ext === 'json' || ext === 'xml') {
     renderPlainText(content, ext);
   } else {
-    previewArea.innerHTML = '<div class="preview-content">${escapeHtml(content)}</div>';
+    previewArea.innerHTML = `<div class="preview-content">${escapeHtml(content)}</div>`;
   }
 }
 
@@ -635,9 +635,9 @@ function renderMarkdown(mdContent) {
   try {
     marked.setOptions({ breaks: true, gfm: true });
     const html = marked.parse(mdContent);
-    previewArea.innerHTML = '<div class="preview-content">${html}</div>';
+    previewArea.innerHTML = `<div class="preview-content">${html}</div>`;
   } catch (err) {
-    showError('Markdown 解析错误: ${err.message}');
+    showError(`Markdown 解析错误: ${err.message}`);
   }
 }
 
@@ -649,13 +649,13 @@ function renderDocx(buffer) {
   }
   mammoth.convertToHtml({ arrayBuffer: buffer })
     .then(result => {
-      previewArea.innerHTML = '<div class="preview-content">${result.value}</div>';
+      previewArea.innerHTML = `<div class="preview-content">${result.value}</div>`;
       if (result.messages.length > 0) {
         console.warn('Mammoth warnings:', result.messages);
       }
     })
     .catch(err => {
-      showError('Word 文档解析失败: ${err.message}');
+      showError(`Word 文档解析失败: ${err.message}`);
     });
 }
 
@@ -681,13 +681,13 @@ function renderXlsx(buffer, fileName) {
       html += '<div class="excel-sheets">';
       html += '<div class="sheet-tabs">';
       sheetNames.forEach((name, i) => {
-        html += '<button class="sheet-tab ${i === 0 ? "active" : ""}" data-sheet="${i}">${escapeHtml(name)}</button>';
+        html += `<button class="sheet-tab ${i === 0 ? 'active' : ''}" data-sheet="${i}">${escapeHtml(name)}</button>`;
       });
       html += '</div>';
       sheetNames.forEach((name, i) => {
         const sheet = workbook.Sheets[name];
         const csv = XLSX.utils.sheet_to_csv(sheet);
-        html += '<div class="sheet-content" data-sheet="${i}" style="display: ${i === 0 ? "block" : "none"}">';
+        html += `<div class="sheet-content" data-sheet="${i}" style="display: ${i === 0 ? 'block' : 'none'}">`;
         html += renderSheetTable(csv, name);
         html += '</div>';
       });
@@ -708,7 +708,7 @@ function renderXlsx(buffer, fileName) {
       });
     });
   } catch (err) {
-    showError('Excel 解析失败: ${err.message}');
+    showError(`Excel 解析失败: ${err.message}`);
   }
 }
 
@@ -718,19 +718,19 @@ function renderSheetTable(csv, sheetName) {
 
   let table = '<div class="excel-table-wrap"><table><thead><tr>';
   const headers = rows[0].split(',');
-  headers.forEach(h => table += '<th>${escapeHtml(h.trim())}</th>');
+  headers.forEach(h => table += `<th>${escapeHtml(h.trim())}</th>`);
   table += '</tr></thead><tbody>';
 
   for (let i = 1; i < Math.min(rows.length, 500); i++) {
     table += '<tr>';
     const cells = rows[i].split(',');
-    cells.forEach(c => table += '<td>${escapeHtml(c.trim())}</td>');
+    cells.forEach(c => table += `<td>${escapeHtml(c.trim())}</td>`);
     table += '</tr>';
   }
   table += '</tbody></table></div>';
 
   if (rows.length > 500) {
-    table += '<p style="padding:12px;color:var(--text-secondary);text-align:center;font-size:13px;">仅显示前 500 行（共 ${rows.length - 1} 行数据）</p>';
+    table += `<p style="padding:12px;color:var(--text-secondary);text-align:center;font-size:13px;">仅显示前 500 行（共 ${rows.length - 1} 行数据）</p>`;
   }
 
   return table;
@@ -745,7 +745,7 @@ function renderCsv(csvContent) {
 function renderPlainText(content, ext) {
   const label = ext.toUpperCase();
   const escaped = escapeHtml(content);
-  previewArea.innerHTML = '<div class="preview-content"><pre><code>${escaped}</code></pre></div>';
+  previewArea.innerHTML = `<div class="preview-content"><pre><code>${escaped}</code></pre></div>`;
 }
 
 // ===== Helpers =====
@@ -756,7 +756,7 @@ function escapeHtml(str) {
 }
 
 function showError(msg) {
-  previewArea.innerHTML = '<div class="error-state"><span class="emoji">⚠️</span><p class="msg">${msg}</p></div>';
+  previewArea.innerHTML = `<div class="error-state"><span class="emoji">⚠️</span><p class="msg">${msg}</p></div>`;
 }
 
 // ===== iOS Shortcut File Detection (via URL hash) =====
