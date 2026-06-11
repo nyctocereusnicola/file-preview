@@ -375,6 +375,23 @@ body {
 }
 .footer a { color: var(--accent); text-decoration: none; }
 
+/* ===== Share Hint ===== */
+.share-hint {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--accent);
+  border-left: 4px solid var(--accent);
+}
+.share-hint-icon { font-size: 28px; flex-shrink: 0; }
+.share-hint-title { font-size: 14px; font-weight: 600; color: var(--accent); }
+.share-hint-name { font-size: 12px; color: var(--text-secondary); word-break: break-all; }
+
 /* ===== Toast ===== */
 .toast {
   position: fixed;
@@ -408,11 +425,21 @@ body {
 
 <!-- Main -->
 <main class="main-content">
+  <!-- Share Hint (shown when opened from another app) -->
+  <div class="share-hint" id="shareHint" style="display:none">
+    <span class="share-hint-icon">📨</span>
+    <div>
+      <div class="share-hint-title">正在接收分享文件...</div>
+      <div class="share-hint-name" id="shareHintName"></div>
+    </div>
+    <div class="spinner" style="width:20px;height:20px;border-width:2px;"></div>
+  </div>
+
   <!-- Upload Zone -->
   <div class="upload-zone" id="uploadZone">
     <span class="icon">📂</span>
     <div class="label">点击选择文件</div>
-    <div class="hint">或拖拽文件到此处</div>
+    <div class="hint">或拖拽文件到此处 · 也可从微信/飞书分享过来</div>
     <input type="file" id="fileInput" accept=".html,.htm,.md,.markdown,.docx,.xlsx,.txt,.csv,.json,.xml">
   </div>
 
@@ -732,7 +759,62 @@ function showError(msg) {
   previewArea.innerHTML = '<div class="error-state"><span class="emoji">⚠️</span><p class="msg">${msg}</p></div>';
 }
 
-// ===== Service Worker =====
+// ===== Shared File Detection =====
+async function checkSharedFile() {
+  const params = new URLSearchParams(window.location.search);
+  const shared = params.get('shared');
+
+  if (!shared) return;
+
+  // Clean URL immediately
+  window.history.replaceState({}, '', location.pathname);
+
+  if (shared === 'error') {
+    showToast('文件接收失败，请重试');
+    return;
+  }
+
+  // Show loading hint
+  const shareHint = document.getElementById('shareHint');
+  const shareHintName = document.getElementById('shareHintName');
+  const fileName = params.get('name') || '未知文件';
+  shareHintName.textContent = fileName;
+  shareHint.style.display = 'flex';
+
+  try {
+    // Request file from service worker
+    const registration = await navigator.serviceWorker.ready;
+    const fileData = await new Promise((resolve, reject) => {
+      const channel = new MessageChannel();
+      channel.port1.onmessage = (e) => {
+        if (e.data.ok) resolve(e.data);
+        else reject(new Error(e.data.error));
+      };
+      registration.active.postMessage({ type: 'GET_SHARED_FILE' }, [channel.port2]);
+    });
+
+    // Reconstruct a File object and process it
+    const blob = new Blob([fileData.buffer], { type: fileData.type });
+    const file = new File([blob], fileData.name, { type: fileData.type });
+
+    shareHint.style.display = 'none';
+    handleFile(file);
+    showToast('已从分享打开');
+  } catch (err) {
+    console.error('Shared file error:', err);
+    shareHint.style.display = 'none';
+    showToast('分享文件已过期，请重新操作');
+  }
+}
+
+// Run on load
+window.addEventListener('DOMContentLoaded', () => {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.ready.then(() => checkSharedFile());
+  }
+});
+
+// ===== Service Worker Registration =====
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').catch(() => {});

@@ -17,13 +17,25 @@
     }
   ],
   "share_target": {
-    "action": "/file-preview/",
-    "method": "GET",
-    "enctype": "application/x-www-form-urlencoded",
+    "action": "/file-preview/share-target",
+    "method": "POST",
+    "enctype": "multipart/form-data",
     "params": {
-      "title": "name",
-      "text": "description",
-      "url": "link"
+      "files": [
+        {
+          "name": "file",
+          "accept": [
+            "text/html",
+            "text/plain",
+            "text/markdown",
+            "text/csv",
+            "application/json",
+            "text/xml",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          ]
+        }
+      ]
     }
   }
 }
